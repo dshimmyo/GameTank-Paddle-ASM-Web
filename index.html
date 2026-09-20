@@ -1,0 +1,261 @@
+<style>.emscripten{padding-right:0;margin-left:auto;margin-right:auto;display:block}textarea.emscripten{font-family:monospace;width:80%}div.emscripten{text-align:center}div.emscripten_border{border:1px solid #000}canvas.emscripten{border:0 none;background-color:#000}.spinner{height:50px;width:50px;margin:0 auto;-webkit-animation:rotation .8s linear infinite;-moz-animation:rotation .8s linear infinite;-o-animation:rotation .8s linear infinite;animation:rotation .8s linear infinite;border-left:10px solid #0096f0;border-right:10px solid #0096f0;border-bottom:10px solid #0096f0;border-top:10px solid #6400c8;border-radius:100%;background-color:#c864fa}@-webkit-keyframes rotation{from{-webkit-transform:rotate(0)}to{-webkit-transform:rotate(360deg)}}@-moz-keyframes rotation{from{-moz-transform:rotate(0)}to{-moz-transform:rotate(360deg)}}@-o-keyframes rotation{from{-o-transform:rotate(0)}to{-o-transform:rotate(360deg)}}@keyframes rotation{from{transform:rotate(0)}to{transform:rotate(360deg)}}.mobileinputcontainer{position:absolute;display:block;bottom:0;left:0;right:0}.mobileinput{width:100%}select{font-size:50px}@media only screen and (orientation:landscape){.mobileinputcontainer{display:none}select{font-size:16pt}}html{height:100%}body{min-height:100%}@media only screen and (orientation:portrait){#canvas{width:100%}html{background-color:#df7f1f}.landscapeOnly{display:none}}</style><body><div class="emscripten landscapeOnly"><h1><span id=title-span></span></h1></div><hr><figure id=spinner style=overflow:visible><div class=spinner></div><center style=margin-top:.5em><strong>emscripten</strong></center></figure><div class=emscripten style=display:none id=status>Downloading...</div><div class=emscripten><progress hidden id=progress max=100 value=0></progress></div><div class=emscripten_border style=position:relative><canvas class=emscripten height=512 id=canvas oncontextmenu=event.preventDefault() tabindex=-1 width=512></canvas></div><hr><div class="emscripten landscapeOnly"><input id=RomFileInput type=file onchange=useFileInput(this) style=display:none> <input id=loadimg type=button onclick='document.getElementById("RomFileInput").click()'value="Open ROM"><div class=editonly><script>async function captureAndUploadBMP(e){try{let t=document.getElementById("canvas"),a=document.createElement("canvas");a.width=t.width,a.height=t.height,a.getContext("2d").drawImage(t,0,0),a.toBlob((async t=>{if(!t)return void console.error("PNG conversion failed");let a=await fetch(e,{method:"PUT",body:t,mode:"cors",headers:{"Content-Type":"image/png","x-amz-acl":"public-read"}});a.ok?alert("Upload successful!"):console.error("Upload failed",await a.text())}),"image/png")}catch(e){console.error("Error processing BMP file:",e)}}async function captureScreenshotAndUpload(){if("undefined"!=typeof GAMEINFO){const e=await fetch("../../games/api/screenshot.php",{method:"POST",body:new URLSearchParams({id:GAMEINFO.id})}),t=(await e.json()).url;await captureAndUploadBMP(t)}}async function useFileInput2(e){if(console.log("useFileInput called"),0!=e.files.length){var t=e.files[0];console.log("loading file "+t.name);var a=new FileReader;a.onload=()=>{!async function(){var t=new Uint8Array(a.result);const o=await fetch("../../games/api/replacerom.php",{method:"POST",body:new URLSearchParams({id:GAMEINFO.id})}),n=(await o.json()).url;(await fetch(n,{method:"PUT",body:t,mode:"cors",headers:{"Content-Type":"binary/octet-stream","x-amz-acl":"public-read"}})).ok?(alert("Upload successful!"),window.location="https://gametank.zone/emulator/web?game="+GAMEINFO.id):console.error("Upload failed",await o.text()),e.value=""}()},a.readAsArrayBuffer(t)}}"undefined"!=typeof GAMEINFO&&(document.getElementById("gameId").value=GAMEINFO.id,document.getElementById("title").value=GAMEINFO.title,document.getElementById("description").value=GAMEINFO.description,document.getElementById(1===GAMEINFO.visibility?"published":"hidden").checked=!0),document.getElementById("screenshotUpload").onclick=async()=>{await captureScreenshotAndUpload()}</script></div></div><div class="emscripten landscapeOnly"><div style=padding:10px;display:inline-block><label for=paddleToggle style=cursor:pointer;display:flex;align-items:center><input id=paddleToggle type=checkbox onchange='window.paddleModeEnabled=this.checked,Module.ccall("SetPaddleMode",null,["boolean"],[this.checked])'style=margin-right:10px checked> <span style=font-family:sans-serif;font-size:14px>Enable Paddle Mode (Mouse)</span></label></div></div><hr><div class=landscapeOnly><span id=description-span></span><h2>Player 1 Controls:</h2>Gamepad:<br><ul><li>Arrow Keys = Directional Buttons</li><li>Enter = Start</li><li>Z, X, C = A, B, C</li><li>B, N, M = also A, B, C</li></ul>Paddle (Mouse):<br><ul><li>Mouse left/right = Paddle left/right</li></ul><h2>Player 2 Controls:</h2><ul><li>T,F,G,H = Up, Left, Down, Right</li><li>1 = Start</li><li>Tab, Q, W = A, B, C</li><li>LShift, A, S = also A, B, C</li></ul><h2>General Keybinds:</h2><ul><li>R = Reset</li><li>Shift+R = Hard Reset</li></ul><h2>Assembly Source Code</h2><pre><code id=asm-source>
+; --- GameTank Assembly Code ---
+DMA_Flags = $2007 ;need to define DMA_Flags keyword
+Bank_Flags = $2005 ;controls banking options
+
+GamePad1 = $2008
+GamePad2 = $2009
+
+DMA_VX = $4000
+DMA_VY = $4001
+DMA_WIDTH = $4004
+DMA_HEIGHT = $4005
+DMA_Status = $4006
+DMA_Color = $4007
+Framebuffer = $4000
+
+inflate_zp = $F0 ;F1 F2 F3 are reserved addresses for pre-built inflate
+
+Player_X = $0 ;pos
+ButtonsPressed0 = $2 ;first read
+ButtonsPressed1 = $3 ;second read
+PaddleByte = $4
+
+;gamepad inputs
+;INPUT_MASK_UP = 	%00001000 ;both reads - hard wired to pin 1 , bypasses mux
+;INPUT_MASK_DOWN = 	%00000100 ;both reads - hard wired to pin 2 , bypasses mux
+;INPUT_MASK_LEFT = 	%00000010
+;INPUT_MASK_RIGHT = 	%00000001
+
+;paddle inputs
+PADDLE_INPUT_MASK_UP = 	%00001000 ; first read ; paddle byte 1
+PADDLE_INPUT_MASK_DOWN = 	%00000100 ;first read ; paddle byte 2
+PADDLE_INPUT_MASK_LEFT = 	%00000010 ; second read ; paddle byte 3
+PADDLE_INPUT_MASK_RIGHT = 	%00000001 ;second read ; paddle byte 4
+PADDLE_INPUT_MASK_Z = 	%00001000 ; first read ; paddle byte 32
+PADDLE_INPUT_MASK_Y = 	%00000100 ; first read ; paddle byte 16
+PADDLE_INPUT_MASK_X = 	%00000010 ; first read ; paddle byte 8
+PADDLE_INPUT_MASK_MODE = 	%00000001 ; first read ; paddle byte 64
+
+;paddle byte positions for reference
+;Think of the paddle byte as a rotation value
+
+;PADDLE_BYTE_UP = %00000001
+;PADDLE_BYTE_DOWN = %00000010
+;PADDLE_BYTE_LEFT = %00000100
+;PADDLE_BYTE_RIGHT = %00001000
+;PADDLE_BYTE_X = %00010000
+;PADDLE_BYTE_Y = %00100000
+;PADDLE_BYTE_Z = %01000000
+;PADDLE_BYTE_MODE = %10000000
+
+; Note: the paddle bits are inverted so after the byte is constructed
+; you still need to invert it for the value to read 0->255 where low is turned all the way CCW and high is CW
+
+	.org $E000
+	;organize: tells the assembler to put code at a specific address
+	;influences address values for labels and production of final rom
+	;$E000 or 57344 is the starting location for an 8KB cartridge
+
+RESET:
+	;code here will get run once when the system boots
+	STZ Bank_Flags
+	
+	CLI
+
+	LDA #$FD
+	STA DMA_Flags
+	LDA #1
+	STA DMA_WIDTH
+	STA DMA_HEIGHT
+	STZ DMA_VX
+	STZ DMA_VY
+	STA DMA_Status
+	WAI
+
+	LDA #%10000000 ;Activate lower page of VRAM/GRAM, CPU accesses GRAM, no IRQ , no transparency
+	STA DMA_Flags
+
+	STZ Player_X
+	STZ ButtonsPressed0
+	STZ ButtonsPressed1
+	STZ PaddleByte
+
+	JSR FillBackground
+	WAI
+
+	CLI ; clear interrupt - disables all interrupts
+
+;# indicates using a value directly instead of an address
+;% denotes binary notation. Each bit is a switch
+;right to left:
+;1 *DMA_enabled - dma blitter engine
+;2 video out page
+;4 *NMI Enabled - trigger an NMI event every vsync
+;8 *color fill mode enable
+;16 tile mode disable
+;32 CPU bank select
+;64 *enable copy completion IRQ - trigger IRQ event when a copy operation completes
+;128 transparency copy disable (skips zeroes)
+
+Forever:
+	;code here will run over and over until the system is reset or turned off
+	LDA GamePad2 ;resets gamepad1 selet signal 
+
+	;first read
+	LDA GamePad1 ;first read select Low up,down,a,start
+	EOR #$FF ; exclusive or inverts each bit - remember this because paddle bits are inverted
+	STA ButtonsPressed0
+
+	;second read
+	LDA GamePad1 ;second read select High up,down,left,right,b,c
+	EOR #$FF ; exclusive or inverts each bit - remember this because paddle bits are inverted
+	STA ButtonsPressed1
+	
+	;paddle handling
+	;compile a paddle byte that looks like mode,z,y,x,rt,lf,dn,up
+	STZ PaddleByte ; init paddlebyte
+	LDA ButtonsPressed0 ; up is in the first read
+	AND #PADDLE_INPUT_MASK_UP ;4th bit
+	LSR
+	LSR
+	LSR ;shift down to bit 1
+	STA PaddleByte ; 
+
+	LDA ButtonsPressed0 ; down - first read
+	AND #PADDLE_INPUT_MASK_DOWN ; 3rd bit
+	LSR ;bit 2
+	CLC
+	ADC PaddleByte ; add new bit to paddle byte
+	STA PaddleByte ; store result
+
+	LDA ButtonsPressed1 ; left in second read
+	AND #PADDLE_INPUT_MASK_LEFT ;2nd bit
+	ASL ; bit 3
+	CLC
+	ADC PaddleByte ; add new bit to paddle byte
+	STA PaddleByte ; store result
+
+	LDA ButtonsPressed1 ; right in second read
+	AND #PADDLE_INPUT_MASK_RIGHT ; bit 1
+	ASL
+	ASL
+	ASL ;bit 4
+	CLC
+	ADC PaddleByte ; add new bit to paddle byte
+	STA PaddleByte ; store result
+
+	LDA ButtonsPressed0 ; xyzmode are all in the first read
+	AND #PADDLE_INPUT_MASK_X ;bit2
+	ASL
+	ASL
+	ASL ; bit 5
+	CLC
+	ADC PaddleByte ; add new bit to paddle byte
+	STA PaddleByte ; store result
+
+	LDA ButtonsPressed0 ; xyzmode are all in the first read
+	AND #PADDLE_INPUT_MASK_Y ;bit3
+	ASL
+	ASL
+	ASL ; bit 6
+
+	CLC
+	ADC PaddleByte ; add new bit to paddle byte
+	STA PaddleByte ; store result
+	LDA ButtonsPressed0 ; xyzmode are all in the first read
+	AND #PADDLE_INPUT_MASK_Z ;bit4
+	ASL
+	ASL
+	ASL ; bit 7
+	CLC
+	ADC PaddleByte ; add new bit to paddle byte
+	STA PaddleByte ; store result
+
+	LDA ButtonsPressed0 ; xyzmode are all in the first read
+	AND #PADDLE_INPUT_MASK_MODE ; bit1
+	ASL ; shift left by 1
+	ASL 
+	ASL
+	ASL
+	ASL
+	ASL
+	ASL ; bit 8
+	CLC
+	ADC PaddleByte ; add new bit to paddle byte
+	STA PaddleByte ; store result
+
+	EOR #$FF ; invert paddlebyte - If you are paying attention it is inverted twice
+	STA PaddleByte
+	
+;PaddleInputMotion:
+	LDA PaddleByte
+	LSR ;shift right by 1 so we only get 128 rotation values, lines up with horizontal resolution
+	STA Player_X
+;	JMP AfterInputs
+
+;AfterInputs:
+	JSR FillBackground
+	WAI
+	JSR DrawPlayer
+	WAI ; wait for the irq after the draw event (64 cycles for 64 pixels square)
+	; wait for nmi at the start of vsync (60 fps) start of the frame being sent to the tv
+	WAI
+	JMP Forever
+
+	; subroutines
+
+FillBackground:
+	LDA #%01001101 ;load value into A register aka accumulator ; disable color fill bit 4 from right
+	STA DMA_Flags ;store value from A into DMA_Flags
+	STZ DMA_VX ; stores zero?
+	STZ DMA_VY
+
+	LDA #127 ; #8
+	STA DMA_WIDTH ;same value of 8 stored in width and height to save time
+	STA DMA_HEIGHT
+
+	LDA #$FE ;#%11111110 ; clyde chose #$FE
+	STA DMA_Color
+
+	LDA #1 ;initate draw operation
+	STA DMA_Status ; turn off the event signal. needs to be cleared after the draw otherwise it gets stuck in the irq event
+
+	RTS
+
+DrawPlayer:
+	LDA #%01001101 ;load value into A register aka accumulator, 4th bit color fill mode enabled
+	STA DMA_Flags ;store value from A into DMA_Flags
+	LDA Player_X ;fetch the byte at address 0
+	
+	STA DMA_VX
+	LDA #24
+	STA DMA_VY
+	
+	LDA #16
+	STA DMA_WIDTH ;same value of 8 stored in width and height to save time
+	STA DMA_HEIGHT
+
+	LDA #$23
+	STA DMA_Color
+
+	LDA #1 ;initate draw operation
+	STA DMA_Status ; turn off the event signal. needs to be cleared after the draw otherwise it gets stuck in the irq event
+	RTS
+
+IRQ:
+	;code here will run after certain interrupts (if enabled)
+	;such as when a DMA draw call completes
+
+	STZ DMA_Status ; turn off the event signal
+	RTI
+NMI:
+	;code here will run once per frame (if enabled)
+	RTI ;return immediately
+
+	.org $FFFA
+	.dw NMI ;non-maskable interrupt
+	.dw RESET ;starting point for the program
+	.dw IRQ ;interrupt request
+	;.dw "dataword" can be given a number or label, places raw data in the binary output
+      </code></pre></div><hr><div class=mobileinputcontainer><img class=mobileinput id=mobileInputImg src=static/gamepad.png></div><script>const canvas=document.getElementById("canvas");window.paddleModeEnabled=!0,canvas.addEventListener("mousemove",(function(e){if(void 0!==Module.ccall&&window.paddleModeEnabled)if(window.isTouchMode){const t=canvas.getBoundingClientRect(),n=t.width/6;let o=(e.clientX-(t.left+n))/(t.width-2*n),l=255*Math.min(Math.max(o,0),1);Module.ccall("SetPaddleValue",null,["number"],[Math.floor(l)])}else{const t=e.movementX||e.mozMovementX||0;0!==t&&Module.ccall("UpdatePaddleFromMouseJS",null,["number","number"],[0,t])}})),canvas.addEventListener("mousedown",(function(e){window.paddleModeEnabled&&!window.isTouchMode&&(canvas.requestPointerLock(),Module._SDL_SetRelativeMouseMode&&Module._SDL_SetRelativeMouseMode(1))}));var statusElement=document.getElementById("status"),progressElement=document.getElementById("progress"),spinnerElement=document.getElementById("spinner"),Module={preRun:[()=>{addRunDependency("syncfs"),FS.mkdir("/idbfs");try{FS.mount(IDBFS,{},"/idbfs"),FS.syncfs(!0,(function(e){assert(!e),removeRunDependency("syncfs")}))}catch(e){console.error(e.message)}}],postRun:[],print:function(){var e=document.getElementById("output");return e&&(e.value=""),function(t){arguments.length>1&&(t=Array.prototype.slice.call(arguments).join(" ")),console.log(t),e&&(e.value+=t+"\n",e.scrollTop=e.scrollHeight)}}(),printErr:function(e){arguments.length>1&&(e=Array.prototype.slice.call(arguments).join(" ")),console.error(e)},canvas:function(){var e=document.getElementById("canvas");return e.addEventListener("webglcontextlost",(function(e){alert("WebGL context lost. You will need to reload the page."),e.preventDefault()}),!1),e}(),setStatus:function(e){if(Module.setStatus.last||(Module.setStatus.last={time:Date.now(),text:""}),e!==Module.setStatus.last.text){var t=e.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/),n=Date.now();t&&n-Module.setStatus.last.time<30||(Module.setStatus.last.time=n,Module.setStatus.last.text=e,t?(e=t[1],progressElement.value=100*parseInt(t[2]),progressElement.max=100*parseInt(t[4]),progressElement.hidden=!1,spinnerElement.hidden=!1):(progressElement.value=null,progressElement.max=null,progressElement.hidden=!0,e||(spinnerElement.hidden=!0)),statusElement.innerHTML=e)}},totalDependencies:0,monitorRunDependencies:function(e){this.totalDependencies=Math.max(this.totalDependencies,e),Module.setStatus(e?"Preparing... ("+(this.totalDependencies-e)+"/"+this.totalDependencies+")":"All downloads complete.")}};function useFileInput(e){if(console.log("useFileInput called"),0!=e.files.length){var t=e.files[0];console.log("loading file "+t.name);var n=new FileReader;n.onload=function(){var o=new Uint8Array(n.result);console.log("loaded file"),Module.FS_createDataFile("/",t.name,o,!0,!0,!0),console.log("calling LoadRomFile"),Module.ccall("LoadRomFile",null,["string"],[t.name]),e.value=""},n.readAsArrayBuffer(t)}}function checkStatus(e){if(!e.ok)throw new Error(`HTTP ${e.status} - ${e.statusText}`);return e}Module.setStatus("Downloading..."),window.onerror=function(){Module.setStatus("Exception thrown, see JavaScript console"),spinnerElement.style.display="none",Module.setStatus=function(e){e&&Module.printErr("[post-exception status] "+e)}};var loadedFiles={};function loadRomByName(e){var t="../roms/"+e;loadedFiles[e]?Module.ccall("LoadRomFile",null,["string"],[e]):fetch(t).then((e=>checkStatus(e)&&e.arrayBuffer())).then((t=>{var n=new Uint8Array(t);Module.FS_createDataFile("/",e,n,!0,!0,!0),loadedFiles[e]=1,Module.ccall("LoadRomFile",null,["string"],[e])})).catch((e=>console.error(e)))}function romURLForID(e){return`https://gametankgames.nyc3.digitaloceanspaces.com/games/phpapi/${e}/game.gtr`}function goDownloadRom(){var e=getParameterByName("game");null!=e&&(window.location.href=romURLForID(e))}function loadRomByID(e){var t=romURLForID(e),n=`game-${e}.gtr`;loadedFiles[n]?Module.ccall("LoadRomFile",null,["string"],[n]):fetch(t).then((e=>checkStatus(e)&&e.arrayBuffer())).then((e=>{var t=new Uint8Array(e);Module.FS_createDataFile("/",n,t,!0,!0,!0),loadedFiles[n]=1,Module.ccall("LoadRomFile",null,["string"],[n])})).catch((e=>console.error(e)))}function loadRomFromList(e){"other"!=e.value&&loadRomByName(e.value)}function getParameterByName(e,t=window.location.href){e=e.replace(/[\[\]]/g,"\\$&");var n=new RegExp("[?&]"+e+"(=([^&#]*)|&|#|$)").exec(t);return n?n[2]?decodeURIComponent(n[2].replace(/\+/g," ")):"":null}Module.onRuntimeInitialized=function(){document.addEventListener("visibilitychange",(()=>{document.hidden?Module.ccall("PauseEmulation"):Module.ccall("ResumeEmulation")}));var e=getParameterByName("rom");null!=e&&loadRomByName(e);var t=getParameterByName("game");null!=t&&loadRomByID(t);var n=[[0,2056,0,32,0,8192,0],[512,0,256,0,8192,0,4096],[0,1028,0,0,0,16,0],[0,0,0,0,0,0,0]],o=document.getElementById("mobileInputImg"),l=[],a=0;o.ontouchstart=function(e){e.preventDefault();for(var t=4/e.targetTouches[0].target.clientHeight,o=0;o<e.targetTouches.length;o++){var r=3-Math.floor(t*(document.body.clientHeight-e.targetTouches[o].clientY)),s=Math.floor(t*e.targetTouches[o].clientX);l[e.targetTouches[o].identifier]=n[r][s],a|=n[r][s],Module.ccall("SetButtons",null,["int"],[a])}},o.ontouchend=function(e){e.preventDefault();for(var t=0;t<e.changedTouches.length;t++)a&=~l[e.changedTouches[t].identifier];Module.ccall("SetButtons",null,["int"],[a])}},"undefined"!=typeof GAMEINFO&&(document.getElementById("canvas").getContext("webgl",{preserveDrawingBuffer:!0}),document.getElementById("title-span").innerText=GAMEINFO.title,document.getElementById("description-span").innerHTML=GAMEINFO.description)</script><script async src=index.js></script></body>
