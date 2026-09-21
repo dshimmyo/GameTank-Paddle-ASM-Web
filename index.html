@@ -20,7 +20,7 @@ Player_X = $0 ;pos
 ButtonsPressed0 = $2 ;first read
 ButtonsPressed1 = $3 ;second read
 PaddleByte = $4
-
+temp_xyz = $5
 ;gamepad inputs
 ;INPUT_MASK_UP = 	%00001000 ;both reads - hard wired to pin 1 , bypasses mux
 ;INPUT_MASK_DOWN = 	%00000100 ;both reads - hard wired to pin 2 , bypasses mux
@@ -32,9 +32,9 @@ PADDLE_INPUT_MASK_UP = 	%00001000 ; first read ; paddle byte 1
 PADDLE_INPUT_MASK_DOWN = 	%00000100 ;first read ; paddle byte 2
 PADDLE_INPUT_MASK_LEFT = 	%00000010 ; second read ; paddle byte 3
 PADDLE_INPUT_MASK_RIGHT = 	%00000001 ;second read ; paddle byte 4
-PADDLE_INPUT_MASK_Z = 	%00001000 ; first read ; paddle byte 32
-PADDLE_INPUT_MASK_Y = 	%00000100 ; first read ; paddle byte 16
 PADDLE_INPUT_MASK_X = 	%00000010 ; first read ; paddle byte 8
+PADDLE_INPUT_MASK_Y = 	%00000100 ; first read ; paddle byte 16
+PADDLE_INPUT_MASK_Z = 	%00001000 ; first read ; paddle byte 32
 PADDLE_INPUT_MASK_MODE = 	%00000001 ; first read ; paddle byte 64
 
 ;paddle byte positions for reference
@@ -71,6 +71,7 @@ RESET:
 	STZ DMA_VX
 	STZ DMA_VY
 	STA DMA_Status
+	STZ temp_xyz
 	WAI
 
 	LDA #%10000000 ;Activate lower page of VRAM/GRAM, CPU accesses GRAM, no IRQ , no transparency
@@ -125,52 +126,44 @@ Forever:
 	LDA ButtonsPressed0 ; down - first read
 	AND #PADDLE_INPUT_MASK_DOWN ; 3rd bit
 	LSR ;bit 2
-	CLC
-	ADC PaddleByte ; add new bit to paddle byte
-	STA PaddleByte ; store result
+	ORA PaddleByte
+    STA PaddleByte
 
 	LDA ButtonsPressed1 ; left in second read
 	AND #PADDLE_INPUT_MASK_LEFT ;2nd bit
 	ASL ; bit 3
-	CLC
-	ADC PaddleByte ; add new bit to paddle byte
-	STA PaddleByte ; store result
+	ORA PaddleByte
+    STA PaddleByte
 
 	LDA ButtonsPressed1 ; right in second read
 	AND #PADDLE_INPUT_MASK_RIGHT ; bit 1
 	ASL
 	ASL
 	ASL ;bit 4
-	CLC
-	ADC PaddleByte ; add new bit to paddle byte
-	STA PaddleByte ; store result
+	ORA PaddleByte
+    STA PaddleByte
 
+	; combining xyz for faster bit shifting
 	LDA ButtonsPressed0 ; xyzmode are all in the first read
 	AND #PADDLE_INPUT_MASK_X ;bit2
-	ASL
-	ASL
-	ASL ; bit 5
-	CLC
-	ADC PaddleByte ; add new bit to paddle byte
-	STA PaddleByte ; store result
+	STA temp_xyz 
 
 	LDA ButtonsPressed0 ; xyzmode are all in the first read
 	AND #PADDLE_INPUT_MASK_Y ;bit3
-	ASL
-	ASL
-	ASL ; bit 6
+	ORA temp_xyz
+	STA temp_xyz
 
-	CLC
-	ADC PaddleByte ; add new bit to paddle byte
-	STA PaddleByte ; store result
 	LDA ButtonsPressed0 ; xyzmode are all in the first read
 	AND #PADDLE_INPUT_MASK_Z ;bit4
+	ORA temp_xyz
+
+	;shift xyz as a group
 	ASL
 	ASL
 	ASL ; bit 7
-	CLC
-	ADC PaddleByte ; add new bit to paddle byte
-	STA PaddleByte ; store result
+	; add to the pack
+	ORA PaddleByte
+    STA PaddleByte
 
 	LDA ButtonsPressed0 ; xyzmode are all in the first read
 	AND #PADDLE_INPUT_MASK_MODE ; bit1
@@ -181,18 +174,14 @@ Forever:
 	ASL
 	ASL
 	ASL ; bit 8
-	CLC
-	ADC PaddleByte ; add new bit to paddle byte
-	STA PaddleByte ; store result
+	ORA PaddleByte
+    STA PaddleByte
 
 	EOR #$FF ; invert paddlebyte - If you are paying attention it is inverted twice
-	STA PaddleByte
+	STA PaddleByte ; keeps the 8-bit paddle rotation value if needed
 	
-;PaddleInputMotion:
-	LDA PaddleByte
 	LSR ;shift right by 1 so we only get 128 rotation values, lines up with horizontal resolution
 	STA Player_X
-;	JMP AfterInputs
 
 ;AfterInputs:
 	JSR FillBackground
