@@ -217,6 +217,14 @@ DrawPlayer:
 	STA DMA_Flags ;store value from A into DMA_Flags
 	LDA Player_X ;fetch the byte at address 0
 	
+	CMP #111
+	BCS ClampPos
+	JMP ContinueDrawing
+
+ClampPos:
+	LDA #111
+
+ContinueDrawing:
 	STA DMA_VX
 	LDA #24
 	STA DMA_VY
